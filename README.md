@@ -42,7 +42,7 @@ If you have extra time, feel free to add any additional features to automation r
 ### Instructions
 
 1. Clone the repo (and push to a private repo) and run `npm install` to install the dependencies.
-2. Run `docker-compose up` to start the database.
+2. Run `docker compose up` to start the database.
 3. Run `npm run migrate` to run initial migrations. When you make database changes, you'll want to run `npx drizzle-kit migrate`.
 4. Run `npm run dev` to start the development server.
 5. Run `npm run worker` to start the background worker. This module isn't hot module reload enabled, so you'll need to restart it after making changes.
