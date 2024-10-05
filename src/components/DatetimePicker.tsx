@@ -1,41 +1,62 @@
-"use client";
+import * as React from "react"
+import { CalendarIcon, Clock } from "lucide-react"
+import { addMinutes, format, isSameDay, set, startOfDay, endOfDay, isAfter, isBefore, max, min } from "date-fns"
 
-import * as React from "react";
-import { CalendarIcon, Clock } from "lucide-react";
-import { format, setHours, setMinutes, addMinutes } from "date-fns";
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+interface DateTimePickerProps {
+  date: Date
+  setDate: (date: Date) => void
+  startDate: Date
+  endDate: Date
+  tick?: number
+}
 
-function DatePicker({ 
-  date, 
-  setDate, 
-  startDate, 
-  endDate 
-}: { 
-  date: Date; 
-  setDate: (date: Date) => void;
-  startDate: Date;
-  endDate: Date;
+export function DateTimePicker({ date, setDate, startDate, endDate, tick = 15 }: DateTimePickerProps) {
+  const handleDateChange = (newDate: Date | undefined) => {
+    if (newDate) {
+      const adjustedDate = set(newDate, {
+        hours: date.getHours(),
+        minutes: date.getMinutes(),
+      })
+      setDate(clampDate(adjustedDate, startDate, endDate))
+    }
+  }
+
+  const handleTimeChange = (type: "hours" | "minutes", value: string) => {
+    const newDate = set(date, { [type]: Number.parseInt(value, 10) })
+    setDate(clampDate(newDate, startDate, endDate))
+  }
+
+  return (
+    <div className="flex flex-col md:flex-row md:space-x-2 space-y-2 md:space-y-0">
+      <DatePicker date={date} onSelect={handleDateChange} startDate={startDate} endDate={endDate} />
+      <TimePicker
+        date={date}
+        onChange={handleTimeChange}
+        startDate={startDate}
+        endDate={endDate}
+        tick={tick}
+      />
+    </div>
+  )
+}
+
+function DatePicker({ date, onSelect, startDate, endDate }: {
+  date: Date
+  onSelect: (date: Date | undefined) => void
+  startDate: Date
+  endDate: Date
 }) {
   return (
-    <Popover modal={true}>
+    <Popover>
       <PopoverTrigger asChild>
         <Button
-          variant={"outline"}
+          variant="outline"
           className={cn(
             "w-full justify-start text-left font-normal",
             !date && "text-muted-foreground"
@@ -49,42 +70,34 @@ function DatePicker({
         <Calendar
           mode="single"
           selected={date}
-          onSelect={(newDate) => newDate && setDate(newDate)}
+          onSelect={onSelect}
           initialFocus
           fromDate={startDate}
           toDate={endDate}
         />
       </PopoverContent>
     </Popover>
-  );
+  )
 }
 
-function TimePicker({ date, setDate, startDate }: { date: Date; setDate: (date: Date) => void; startDate: Date }) {
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  const startHour = isToday ? now.getHours() : 0;
-  const startMinute = isToday ? Math.ceil(now.getMinutes() / 15) * 15 : 0;
+function TimePicker({ date, onChange, startDate, endDate, tick }: {
+  date: Date
+  onChange: (type: "hours" | "minutes", value: string) => void
+  startDate: Date
+  endDate: Date
+  tick: number
+}) {
+  const minTime = max([startDate, startOfDay(date)])
+  const maxTime = min([endDate, endOfDay(date)])
 
-  const hours = Array.from({ length: 24 }, (_, i) => i).filter(hour => hour >= startHour);
-  const minutes = Array.from({ length: 60 / 15 }, (_, i) => i * 15).filter(minute => !isToday || minute >= startMinute);
-
-  const handleHourChange = (hour: string) => {
-    const newDate = new Date(date);
-    newDate.setHours(Number.parseInt(hour, 10));
-    setDate(newDate);
-  };
-
-  const handleMinuteChange = (minute: string) => {
-    const newDate = new Date(date);
-    newDate.setMinutes(Number.parseInt(minute, 10));
-    setDate(newDate);
-  };
+  const hours = generateHourOptions(minTime, maxTime)
+  const minutes = generateMinuteOptions(date, minTime, maxTime, tick)
 
   return (
-    <Popover modal={true}>
+    <Popover>
       <PopoverTrigger asChild>
         <Button
-          variant={"outline"}
+          variant="outline"
           className={cn(
             "w-full justify-start text-left font-normal",
             !date && "text-muted-foreground"
@@ -96,51 +109,89 @@ function TimePicker({ date, setDate, startDate }: { date: Date; setDate: (date: 
       </PopoverTrigger>
       <PopoverContent className="w-auto p-4" align="start">
         <div className="flex space-x-2">
-          <Select onValueChange={handleHourChange} value={date.getHours().toString()}>
-            <SelectTrigger className="w-[70px]">
-              <SelectValue placeholder="Hour" />
-            </SelectTrigger>
-            <SelectContent>
-              {hours.map((hour) => (
-                <SelectItem key={hour} value={hour.toString()}>
-                  {hour.toString().padStart(2, "0")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select onValueChange={handleMinuteChange} value={date.getMinutes().toString()}>
-            <SelectTrigger className="w-[70px]">
-              <SelectValue placeholder="Minute" />
-            </SelectTrigger>
-            <SelectContent>
-              {minutes.map((minute) => (
-                <SelectItem key={minute} value={minute.toString()}>
-                  {minute.toString().padStart(2, "0")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <TimeSelect
+            value={date.getHours().toString()}
+            onChange={(value) => onChange("hours", value)}
+            options={hours}
+            placeholder="Hour"
+          />
+          <TimeSelect
+            value={date.getMinutes().toString()}
+            onChange={(value) => onChange("minutes", value)}
+            options={minutes}
+            placeholder="Minute"
+          />
         </div>
       </PopoverContent>
     </Popover>
-  );
+  )
 }
 
-export function DateTimePicker({
-  date,
-  setDate,
-  startDate,
-  endDate,
-}: {
-  date: Date;
-  setDate: (date: Date) => void;
-  startDate: Date;
-  endDate: Date;
+function TimeSelect({ value, onChange, options, placeholder }: {
+  value: string
+  onChange: (value: string) => void
+  options: { value: string; label: string }[]
+  placeholder: string
 }) {
   return (
-    <div className="flex space-x-2">
-      <DatePicker date={date} setDate={setDate} startDate={startDate} endDate={endDate} />
-      <TimePicker date={date} setDate={setDate} startDate={startDate} />
-    </div>
-  );
+    <Select onValueChange={onChange} value={value}>
+      <SelectTrigger className="w-[70px]">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+function generateHourOptions(minTime: Date, maxTime: Date) {
+  const options = []
+  const startHour = minTime.getHours()
+  const endHour = maxTime.getHours()
+
+  for (let hour = startHour; hour <= endHour; hour++) {
+    options.push({
+      value: hour.toString(),
+      label: hour.toString().padStart(2, "0"),
+    })
+  }
+
+  return options
+}
+
+function generateMinuteOptions(date: Date, minTime: Date, maxTime: Date, tick: number) {
+  const options = []
+  const isMinHour = date.getHours() === minTime.getHours()
+  const isMaxHour = date.getHours() === maxTime.getHours()
+  const now = new Date()
+  const isToday = isSameDay(date, now)
+  const isCurrentHour = isToday && date.getHours() === now.getHours()
+
+  let startMinute = isMinHour ? minTime.getMinutes() : 0
+  const endMinute = isMaxHour ? maxTime.getMinutes() : 59
+
+  if (isCurrentHour) {
+    startMinute = Math.ceil(now.getMinutes() / tick) * tick
+    if (startMinute > 59) {
+      return [] // No valid minutes for the current hour
+    }
+  }
+
+  for (let minute = startMinute; minute <= endMinute; minute += tick) {
+    options.push({
+      value: minute.toString(),
+      label: minute.toString().padStart(2, "0"),
+    })
+  }
+
+  return options
+}
+
+function clampDate(date: Date, min: Date, max: Date): Date {
+  return new Date(Math.min(Math.max(date.getTime(), min.getTime()), max.getTime()))
 }
