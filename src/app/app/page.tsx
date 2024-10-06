@@ -1,23 +1,27 @@
 "use client";
 
+import { ArrowRightIcon } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useAuthState } from "@/contexts/AuthStateContext";
-import type { User } from "@/db/users.db";
-import type { Account } from "@/db/accounts.db";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import Link from "next/link";
-import type { transactions } from "@/db/transactions.db";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import type { transferRequestBodySchema } from "../api/account/[accountId]/transfer/route";
 
-import TransferDrawer from "./TransferDrawer"
+import { useAuthState } from "@/contexts/AuthStateContext";
+import TransferDrawer from "./TransferDrawer";
+
+import type { Account } from "@/db/accounts.db";
+import type { transactions } from "@/db/transactions.db";
+import type { User } from "@/db/users.db";
+import type { transferRequestBodySchema } from "../api/account/[accountId]/transfer/route";
 
 interface AccountWithBalance extends Account {
 	balance: string;
@@ -41,6 +45,8 @@ export default function AppPage() {
 		transactions: [],
 	});
 	const [isDrawerOpen, setIsDrawerOpen] = useState(false); // State to control drawer visibility
+
+	const router = useRouter();
 
 	async function fetchUserData() {
 		if (!impersonatedUserId) {
@@ -205,52 +211,73 @@ export default function AppPage() {
 						</tbody>
 					</table>
 				</Card>
-				<Card className="p-6 min-w-0">
-					<div className="flex justify-between items-center mb-4">
-						<h2 className="text-xl font-semibold ">
-							{appState.selectedAccount
-								? "Transactions"
-								: "Select an account to view transactions"}
-						</h2>
+				<Card className="p-6 min-w-0 flex flex-col justify-between">
+					<div>
+						<div className="flex justify-between items-center mb-4">
+							<h2 className="text-xl font-semibold ">
+								{appState.selectedAccount
+									? "Transactions"
+									: "Select an account to view transactions"}
+							</h2>
 
+							{appState.selectedAccount && (
+								<div className="flex flex-row gap-2">
+									<Button
+										variant="outline"
+										onClick={() => router.push("/app/schedule")}
+									>
+										Schedule Transfer
+									</Button>
+									<Button
+										variant="default"
+										onClick={() => setIsDrawerOpen(true)}
+									>
+										Move Money
+									</Button>
+								</div>
+							)}
+						</div>
 						{appState.selectedAccount && (
-							<Button
-								className="mt-4"
-								onClick={() => setIsDrawerOpen(true)}
-								type="button" // Provide explicit type
-							>
-								Move Money
-							</Button>
+							<table className="w-full table-fixed">
+								<thead>
+									<tr className="text-left">
+										<th className="pb-2">Date</th>
+										<th className="pb-2">Description</th>
+										<th className="pb-2 text-right">Amount</th>
+									</tr>
+								</thead>
+								<tbody>
+									{appState.transactions?.map((transaction) => (
+										<tr key={transaction.id} className="border-t">
+											<td className="py-2">
+												{new Date(transaction.createdAt).toLocaleDateString()}
+											</td>
+											<td className="py-2 overflow-hidden text-ellipsis whitespace-nowrap">
+												{transaction.description}
+											</td>
+											<td className="py-2 text-right">
+												{Intl.NumberFormat("en-US", {
+													style: "currency",
+													currency: "USD",
+												}).format(transaction.amountCents / 100)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
 						)}
 					</div>
 					{appState.selectedAccount && (
-						<table className="w-full table-fixed">
-							<thead>
-								<tr className="text-left">
-									<th className="pb-2">Date</th>
-									<th className="pb-2">Description</th>
-									<th className="pb-2 text-right">Amount</th>
-								</tr>
-							</thead>
-							<tbody>
-								{appState.transactions?.map((transaction) => (
-									<tr key={transaction.id} className="border-t">
-										<td className="py-2">
-											{new Date(transaction.createdAt).toLocaleDateString()}
-										</td>
-										<td className="py-2 overflow-hidden text-ellipsis whitespace-nowrap">
-											{transaction.description}
-										</td>
-										<td className="py-2 text-right">
-											{Intl.NumberFormat("en-US", {
-												style: "currency",
-												currency: "USD",
-											}).format(transaction.amountCents / 100)}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
+						<div className="w-full flex items-center justify-end mt-4">
+							<Button
+								variant="outline"
+								className="gap-2"
+								onClick={() => router.push("/app/schedule")}
+							>
+								View Scheduled Transfers
+								<ArrowRightIcon className="w-4 h-4" />
+							</Button>
+						</div>
 					)}
 				</Card>
 			</div>
