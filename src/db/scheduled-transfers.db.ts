@@ -20,7 +20,8 @@ export const scheduledTransfers = pgTable("scheduled_transfers", {
   recurringInterval: integer("recurring_interval"),
   recurringFrequency: varchar("recurring_frequency"),
   eventType: varchar("event_type"),
-  status: varchar("status").notNull().default("pending"),
+  status: varchar("status").notNull().default("submitted"),
+  jobId: varchar("job_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
