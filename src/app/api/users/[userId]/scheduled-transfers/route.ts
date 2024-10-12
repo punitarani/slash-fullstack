@@ -1,7 +1,7 @@
 import { db } from "@/db/db";
 import { scheduledTransfers } from "@/db/scheduled-transfers.db";
 import { accounts } from "@/db/accounts.db";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { users } from "@/db/users.db";
 import boss from "@/jobs/boss";
@@ -22,14 +22,10 @@ export async function GET(
   try {
     const scheduledTransfersList = await db
       .select({
-        transferId: scheduledTransfers.id,
-        sourceAccountId: scheduledTransfers.sourceAccountId,
-        sourceAccountName: accounts.name,
-        destinationType: scheduledTransfers.destinationType,
-        destinationAccountId: scheduledTransfers.destinationAccountId,
-        destinationAccountName: accounts.name,
-        destinationUserId: scheduledTransfers.destinationUserId,
-        destinationUserName: users.fullName,
+        id: scheduledTransfers.id,
+        accountId: scheduledTransfers.accountId,
+        type: scheduledTransfers.type,
+        entityId: scheduledTransfers.entityId,
         amountCents: scheduledTransfers.amountCents,
         transferType: scheduledTransfers.transferType,
         scheduleDate: scheduledTransfers.scheduleDate,
@@ -41,9 +37,10 @@ export async function GET(
         updatedAt: scheduledTransfers.updatedAt,
       })
       .from(scheduledTransfers)
-      .leftJoin(accounts, eq(scheduledTransfers.sourceAccountId, accounts.id))
-      .leftJoin(users, eq(scheduledTransfers.destinationUserId, users.id))
+      .leftJoin(accounts, eq(scheduledTransfers.accountId, accounts.id))
+      .leftJoin(users, eq(scheduledTransfers.entityId, users.id))
       .where(eq(accounts.userId, userId))
+      .orderBy(desc(scheduledTransfers.createdAt))
       .execute();
 
     return NextResponse.json(scheduledTransfersList, { status: 200 });
@@ -95,7 +92,7 @@ export async function DELETE(
     const account = await db
       .select()
       .from(accounts)
-      .where(eq(accounts.id, scheduledTransfer.sourceAccountId))
+      .where(eq(accounts.id, scheduledTransfer.accountId))
       .execute()
       .then((res) => res[0]);
 

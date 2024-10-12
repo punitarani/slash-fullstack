@@ -29,13 +29,10 @@ import {
 } from "@/components/ui/dialog";
 
 export type ScheduledTransfer = {
-  transferId: string;
-  sourceAccountId: string;
-  sourceAccountName: string;
-  destinationType: "user" | "account";
-  destinationAccountId: string | null;
-  destinationUserId: string | null;
-  destinationUserName: string | null;
+  id: string;
+  accountId: string;
+  type: "user" | "account";
+  entityId: string;
   amountCents: number;
   transferType: "datetime" | "recurring" | "event";
   scheduleDate?: Date;
@@ -139,7 +136,7 @@ export default function ScheduledTransfersTable({
       // Update the transfers state by marking the transfer as deleted
       setTransfers((prevTransfers) =>
         prevTransfers.map((transfer) =>
-          transfer.transferId === selectedTransferId
+          transfer.id === selectedTransferId
             ? { ...transfer, status: "deleted" }
             : transfer
         )
@@ -170,18 +167,18 @@ export default function ScheduledTransfersTable({
           </TableHeader>
           <TableBody>
             {transfers.map((transfer) => (
-              <TableRow key={transfer.transferId}>
+              <TableRow key={transfer.id}>
                 <TableCell>
                   <div className="flex items-center justify-center gap-2">
                     {getTransferTypeIcon(transfer.transferType)}
                   </div>
                 </TableCell>
                 <TableCell>{formatAmount(transfer.amountCents)}</TableCell>
-                <TableCell>{transfer.sourceAccountName}</TableCell>
                 <TableCell className="truncate max-w-[16ch]">
-                  {transfer.destinationType === "account"
-                    ? transfer.destinationAccountId
-                    : transfer.destinationUserName}
+                  {transfer.accountId}
+                </TableCell>
+                <TableCell className="truncate max-w-[16ch]">
+                  {transfer.entityId}
                 </TableCell>
                 <TableCell className="whitespace-pre-line">
                   {formatSchedule(transfer)}
@@ -211,7 +208,7 @@ export default function ScheduledTransfersTable({
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        setSelectedTransferId(transfer.transferId);
+                        setSelectedTransferId(transfer.id);
                         setIsDialogOpen(true);
                       }}
                       disabled={transfer.status === "processing"}

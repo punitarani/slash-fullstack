@@ -7,15 +7,13 @@ export const scheduledTransfers = pgTable("scheduled_transfers", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  sourceAccountId: varchar("source_account_id")
+  accountId: varchar("account_id")
     .notNull()
     .references(() => accounts.id),
-  destinationType: varchar("destination_type").notNull(),
-  destinationAccountId: varchar("destination_account_id")
-    .references(() => accounts.id),
-  destinationUserId: varchar("destination_user_id").references(() => users.id),
+  type: varchar("type").notNull(), // user or account
+  entityId: varchar("entity_id").notNull(),
   amountCents: integer("amount_cents").notNull(),
-  transferType: varchar("transfer_type").notNull(),
+  transferType: varchar("transfer_type").notNull(), // datetime, recurring, event
   scheduleDate: timestamp("schedule_date"),
   recurringInterval: integer("recurring_interval"),
   recurringFrequency: varchar("recurring_frequency"),

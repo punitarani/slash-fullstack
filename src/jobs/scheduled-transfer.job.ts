@@ -9,18 +9,18 @@ import { createJob } from "./task";
 
 import type { JobInsert } from "pg-boss";
 
-export interface TransferMoneyJobData {
+export interface ScheduledTransferJobData {
   accountId: string;
   type: "user" | "account";
   entityId: string;
   amount: number;
 }
 
-export const transferMoneyJobName = "transfer-money";
+export const scheduledTransferJobName = "scheduled-transfer";
 
-export const transferMoneyJob = createJob({
-  name: transferMoneyJobName,
-  handler: async (job: JobInsert<TransferMoneyJobData>) => {
+export const scheduledTransferJob = createJob({
+  name: scheduledTransferJobName,
+  handler: async (job: JobInsert<ScheduledTransferJobData>) => {
     if (!job.data) {
       throw new Error("Job data is required");
     }

@@ -106,38 +106,41 @@ export default function ScheduleTransfersPage() {
 
   const router = useRouter();
 
-  const [refreshScheduledTable, setRefreshScheduledTable] =
-    React.useState(false);
+  const [refreshScheduledTable, setRefreshScheduledTable] = useState(false);
 
-  async function fetchUserData() {
-    if (!impersonatedUserId) {
-      setAppState((prevState) => ({ ...prevState, loading: false }));
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/users/${impersonatedUserId}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch user data");
+  // Fetch user data
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!impersonatedUserId) {
+        setAppState((prevState) => ({ ...prevState, loading: false }));
+        return;
       }
-      const data = await response.json();
 
-      setAppState((prevState) => ({
-        ...prevState,
-        user: data.user,
-        accounts: data.accounts,
-        loading: false,
-      }));
-    } finally {
-      setAppState((prevState) => ({ ...prevState, loading: false }));
-    }
-  }
+      try {
+        const response = await fetch(`/api/users/${impersonatedUserId}`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+        const data = await response.json();
 
-  React.useEffect(() => {
+        setAppState((prevState) => ({
+          ...prevState,
+          user: data.user,
+          accounts: data.accounts,
+          loading: false,
+        }));
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        setError("Failed to fetch user data");
+      } finally {
+        setAppState((prevState) => ({ ...prevState, loading: false }));
+      }
+    };
+
     fetchUserData();
   }, [impersonatedUserId]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (fromAccount) {
       const maximumBalanceForSelectedAccount = (() => {
         const balance = appState.accounts.find(
@@ -198,39 +201,20 @@ export default function ScheduleTransfersPage() {
     setError(null); // Clear any previous errors
 
     try {
+      if (
+        !amount ||
+        !fromAccount ||
+        (transferType === "account" ? !toAccount : !toUser)
+      ) {
+        throw new Error("Invalid form data");
+      }
+
       const transferData = {
+        accountId: fromAccount?.id,
         type: transferType,
-        sourceAccountId: fromAccount?.id,
-        ...(transferType === "account"
-          ? {
-              destinationType: "account",
-              destinationAccountId: toAccount?.id,
-              destinationUserId: null,
-            }
-          : {
-              destinationType: "user",
-              destinationUserId: toUser?.id,
-              destinationAccountId: null,
-            }),
-        amountCents: Number(amount) || 0, // Ensure it's a number
-        transferType: activeTab,
-        ...(activeTab === "datetime"
-          ? {
-              scheduleDate: scheduleDate,
-              recurringInterval: null,
-              recurringFrequency: null,
-            }
-          : activeTab === "recurring"
-          ? {
-              scheduleDate: scheduleDate,
-              recurringInterval: recurringInterval,
-              recurringFrequency: recurringFrequency,
-            }
-          : activeTab === "event"
-          ? {
-              eventType: "deposit",
-            }
-          : {}),
+        entityId: transferType === "account" ? toAccount?.id : toUser?.id,
+        amount: Number(amount),
+        scheduleDate: scheduleDate,
       };
 
       const response = await fetch(`/api/account/${fromAccount?.id}/schedule`, {
@@ -254,15 +238,20 @@ export default function ScheduleTransfersPage() {
 
       // Trigger refresh of ScheduledTable
       setRefreshScheduledTable((prev) => !prev);
-    } catch (err: any) {
-      setError(err.message || "An unknown error occurred");
+    } catch (err: unknown) {
+      // Changed from 'any' to 'unknown'
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unknown error occurred");
+      }
     } finally {
       setIsLoading(false); // Stop loading
     }
   };
 
   // Reset the recurring state when the active tab changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (activeTab === "datetime") {
       setRecurringInterval(null);
       setRecurringFrequency(null);
@@ -366,7 +355,9 @@ export default function ScheduleTransfersPage() {
             <Tabs
               defaultValue="datetime"
               className="w-full py-8"
-              onValueChange={(val) => setActiveTab(val as any)}
+              onValueChange={(val) =>
+                setActiveTab(val as "datetime" | "recurring" | "event")
+              }
             >
               <TabsList className="w-full">
                 <TabsTrigger value="datetime" className="w-full">
@@ -415,7 +406,7 @@ export default function ScheduleTransfersPage() {
                             ? 52
                             : 12
                         }
-                        value={recurringInterval!}
+                        value={recurringInterval ?? 0}
                         onChange={(e) => {
                           const value = Number(e.target.value);
                           if (Number.isNaN(value)) return;
@@ -435,7 +426,7 @@ export default function ScheduleTransfersPage() {
                     <div className="flex flex-col gap-1">
                       <Label>Frequency</Label>
                       <Select
-                        value={recurringFrequency!}
+                        value={recurringFrequency ?? "days"}
                         onValueChange={(value: "days" | "weeks" | "months") => {
                           setRecurringFrequency(value);
                           if (value === "days") {
