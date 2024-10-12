@@ -7,7 +7,7 @@ import { accounts } from "@/db/accounts.db";
 import { transactions } from "@/db/transactions.db";
 import { createJob } from "./task";
 
-import type { Job } from "pg-boss";
+import type { JobInsert } from "pg-boss";
 
 export interface TransferMoneyJobData {
   accountId: string;
@@ -20,9 +20,8 @@ export const transferMoneyJobName = "transfer-money";
 
 export const transferMoneyJob = createJob({
   name: transferMoneyJobName,
-  handler: async (job: Job<TransferMoneyJobData>) => {
-    const { accountId, type, entityId, amount } = job.data;
-    console.log({ accountId, type, entityId, amount });
+  handler: async (job: JobInsert<TransferMoneyJobData>) => {
+    const { accountId, type, entityId, amount } = job.data!;
 
     try {
       // Check if the source account exists
@@ -35,7 +34,6 @@ export const transferMoneyJob = createJob({
       if (sourceAccount.length === 0) {
         throw new Error("Source account not found");
       }
-      console.log({ sourceAccount });
 
       const destinationAccountId = await (async () => {
         if (type === "account") {
@@ -62,7 +60,6 @@ export const transferMoneyJob = createJob({
             name: destinationAccount[0].name,
           };
         }
-        console.log({ type, entityId });
 
         // If type is "user", find the user's Primary account
         const userAccount = await db
@@ -81,7 +78,6 @@ export const transferMoneyJob = createJob({
           name: `Primary (${userAccount[0].userId})`,
         };
       })();
-      console.log({ destinationAccountId });
       // Start a transaction
       const res = await db.transaction(async (tx) => {
         // Calculate the source account balance by summing all transactions
@@ -92,11 +88,9 @@ export const transferMoneyJob = createJob({
 
         const sourceBalance = Number(balanceResult[0]?.balance ?? 0);
 
-        console.log({ sourceBalance, amount });
         if (sourceBalance < amount) {
           throw new Error("Insufficient funds");
         }
-        console.log("sufficient funds");
 
         const timestamp = new Date();
         const bookTraceId = crypto.randomUUID();

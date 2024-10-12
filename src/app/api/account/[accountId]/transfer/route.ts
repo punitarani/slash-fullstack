@@ -30,13 +30,17 @@ export async function POST(
       params: {
         id: `transfer-${accountId}-${Date.now()}`,
         name: transferMoneyJobName,
-        expireInSeconds: 100000,
+        expireInSeconds: 300,
         data: {
           accountId,
           type,
           entityId,
           amount,
         },
+        retryLimit: 3,
+        retryDelay: 60,
+        retryBackoff: true,
+        deadLetter: 'failed-transfer',
       },
     });
 
