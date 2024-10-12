@@ -3,16 +3,13 @@ import { z } from "zod";
 import { db } from "@/db/db";
 import { accounts } from "@/db/accounts.db";
 import { transactions } from "@/db/transactions.db";
-import { scheduledTransfers } from "@/db/scheduled-transfers.db";
 import { eq, and, sum } from "drizzle-orm";
-import { scheduleTransferAtDatetimeJob } from "@/jobs/schedule-transfer.job";
-import crypto from "node:crypto";
 
+// Define the schema for the request body
 export const transferRequestBodySchema = z.object({
 	type: z.enum(["user", "account"]),
 	entityId: z.string(),
 	amount: z.number().positive(),
-	scheduledTransferId: z.string().uuid().optional(),
 });
 
 export async function POST(
@@ -24,17 +21,16 @@ export async function POST(
 		const body = await req.json();
 
 		// Validate the request body
-		const { type, entityId, amount, scheduledTransferId } = transferRequestBodySchema.parse(body);
+		const { type, entityId, amount } = transferRequestBodySchema.parse(body);
 
 		// Check if the source account exists
 		const sourceAccount = await db
 			.select()
 			.from(accounts)
 			.where(eq(accounts.id, accountId))
-			.limit(1)
-			.then((rows) => rows[0]);
+			.limit(1);
 
-		if (!sourceAccount) {
+		if (sourceAccount.length === 0) {
 			return NextResponse.json(
 				{ error: "Source account not found" },
 				{ status: 404 },
@@ -48,10 +44,9 @@ export async function POST(
 					.select()
 					.from(accounts)
 					.where(eq(accounts.id, entityId))
-					.limit(1)
-					.then((rows) => rows[0]);
+					.limit(1);
 
-				if (!destinationAccount) {
+				if (destinationAccount.length === 0) {
 					return NextResponse.json(
 						{ error: "Destination account not found" },
 						{ status: 404 },
@@ -59,7 +54,7 @@ export async function POST(
 				}
 
 				// Assert that the destination account belongs to the same user
-				if (destinationAccount.userId !== sourceAccount.userId) {
+				if (destinationAccount[0].userId !== sourceAccount[0].userId) {
 					return NextResponse.json(
 						{
 							error: "Cannot transfer to an account owned by a different user",
@@ -70,7 +65,7 @@ export async function POST(
 
 				return {
 					entityId,
-					name: destinationAccount.name,
+					name: destinationAccount[0].name,
 				};
 			}
 
@@ -78,24 +73,18 @@ export async function POST(
 			const userAccount = await db
 				.select()
 				.from(accounts)
-				.where(
-					and(
-						eq(accounts.userId, entityId),
-						eq(accounts.name, "Primary")
-					)
-				)
-				.limit(1)
-				.then((rows) => rows[0]);
+				.where(and(eq(accounts.userId, entityId), eq(accounts.name, "Primary")))
+				.limit(1);
 
-			if (!userAccount) {
+			if (userAccount.length === 0) {
 				return NextResponse.json(
 					{ error: "Destination user has no default account" },
 					{ status: 404 },
 				);
 			}
 			return {
-				entityId: userAccount.id,
-				name: `Primary (${userAccount.userId})`,
+				entityId: userAccount[0].id,
+				name: `Primary (${userAccount[0].userId})`,
 			};
 		})();
 
@@ -109,12 +98,11 @@ export async function POST(
 			const balanceResult = await tx
 				.select({ balance: sum(transactions.amountCents) })
 				.from(transactions)
-				.where(eq(transactions.accountId, accountId))
-				.groupBy(transactions.accountId)
-				.limit(1);
+				.where(and(eq(transactions.accountId, accountId)));
 
 			const sourceBalance = Number(balanceResult[0]?.balance ?? 0);
 
+			console.log({ sourceBalance, amount });
 			if (sourceBalance < amount) {
 				return NextResponse.json(
 					{ error: "Insufficient funds" },
@@ -150,108 +138,14 @@ export async function POST(
 					},
 				])
 				.returning();
-
-			if (scheduledTransferId) {
-				// This transfer was triggered by a scheduled job
-				const scheduledTransfer = await tx
-					.select()
-					.from(scheduledTransfers)
-					.where(eq(scheduledTransfers.id, scheduledTransferId))
-					.limit(1)
-					.then((rows) => rows[0]);
-
-				if (scheduledTransfer) {
-					// Update the scheduled transfer status to "successful"
-					await tx
-						.update(scheduledTransfers)
-						.set({
-							status: "successful",
-							updatedAt: new Date(),
-						})
-						.where(eq(scheduledTransfers.id, scheduledTransfer.id));
-				}
-			} else {
-				// This is a user-initiated transfer
-				// Optionally, you can log or handle this case differently
-			}
-
-			// Trigger any On Deposit scheduled transfers for the destination account
-			const isDeposit = amount > 0 && !scheduledTransferId;
-			if (isDeposit) {
-				// Fetch pending "On Deposit" scheduled transfers for this account
-				const onDepositTransfers = await db
-					.select()
-					.from(scheduledTransfers)
-					.where(
-						and(
-							eq(scheduledTransfers.sourceAccountId, destinationAccountId.entityId),
-							eq(scheduledTransfers.transferType, "event"),
-							eq(scheduledTransfers.eventType, "deposit"),
-							eq(scheduledTransfers.status, "pending")
-						)
-					);
-
-				for (const transfer of onDepositTransfers) {
-					const jobId = await scheduleTransferAtDatetimeJob.trigger(
-						{
-							params: {
-								scheduledTransferId: transfer.id,
-							},
-						},
-					);
-
-					// Update the scheduled transfer with the jobId and status
-					await db
-						.update(scheduledTransfers)
-						.set({
-							jobId,
-							status: "processing",
-							updatedAt: new Date(),
-						})
-						.where(eq(scheduledTransfers.id, transfer.id));
-				}
-			}
 		});
 
 		if (res instanceof NextResponse) {
 			return res;
 		}
 
-		// Prepare response message
-		const responseMessage: any = { success: true };
-
-		if (scheduledTransferId) {
-			responseMessage.message = "Transfer was executed as part of a scheduled transfer.";
-			const scheduledTransfer = await db
-				.select()
-				.from(scheduledTransfers)
-				.where(eq(scheduledTransfers.id, scheduledTransferId))
-				.limit(1)
-				.then((rows) => rows[0]);
-
-			if (scheduledTransfer) {
-				responseMessage.triggeredBy = "scheduled_job";
-				responseMessage.rule = scheduledTransfer.transferType === "recurring"
-					? `Recurring transfer every ${scheduledTransfer.recurringInterval} ${scheduledTransfer.recurringFrequency}`
-					: `Scheduled at ${scheduledTransfer.scheduleDate}`;
-			}
-		} else {
-			responseMessage.message = "Transfer was successfully submitted.";
-		}
-
-		return NextResponse.json(responseMessage, { status: 200 });
-	} catch (error: any) {
-		console.error("Transfer failed:", error);
-		// If it's a scheduled transfer, update its status to "failed"
-		if (error.scheduledTransferId) {
-			await db
-				.update(scheduledTransfers)
-				.set({
-					status: "failed",
-					updatedAt: new Date(),
-				})
-				.where(eq(scheduledTransfers.id, error.scheduledTransferId));
-		}
+		return NextResponse.json({ success: true }, { status: 200 });
+	} catch (error) {
 		return NextResponse.json({ error: "Transfer failed" }, { status: 500 });
 	}
 }
