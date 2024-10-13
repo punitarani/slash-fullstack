@@ -1,19 +1,26 @@
 import crypto from "node:crypto";
 
-import { eq, and, sum } from "drizzle-orm";
+import { and, eq, sum } from "drizzle-orm";
 
 import { db } from "@/db/db";
 import { accounts } from "@/db/accounts.db";
+import { scheduledTransfers } from "@/db/scheduled-transfers.db";
 import { transactions } from "@/db/transactions.db";
+import boss from "./boss";
 import { createJob } from "./task";
 
 import type { JobInsert } from "pg-boss";
 
 export interface ScheduledTransferJobData {
+  transferId: string;
   accountId: string;
   type: "user" | "account";
   entityId: string;
   amount: number;
+  transferType: "datetime" | "recurring" | "event";
+  scheduleDate?: string;
+  recurringInterval?: number;
+  recurringFrequency?: "days" | "weeks" | "months";
 }
 
 export const scheduledTransferJobName = "scheduled-transfer";
@@ -25,7 +32,17 @@ export const scheduledTransferJob = createJob({
       throw new Error("Job data is required");
     }
 
-    const { accountId, type, entityId, amount } = job.data;
+    const {
+      transferId,
+      accountId,
+      type,
+      entityId,
+      amount,
+      transferType,
+      recurringInterval,
+      recurringFrequency,
+      scheduleDate,
+    } = job.data;
 
     try {
       // Check if the source account exists
@@ -106,7 +123,7 @@ export const scheduledTransferJob = createJob({
               id: crypto.randomUUID(),
               traceId: bookTraceId,
               amountCents: -amount, // Convert dollars to cents
-              description: `Transfer to ${
+              description: `[Scheduled] Transfer to ${
                 type === "user" ? "user" : "account"
               } ${destinationAccountId.name}`,
               type: "book",
@@ -126,10 +143,91 @@ export const scheduledTransferJob = createJob({
           .returning();
       });
 
+      // If the transfer is recurring, schedule the next transfer
+      // Schedule the job to run at the given date/time
+      if (transferType === "recurring") {
+        // Calculate the next schedule date
+        const nextScheduleDate = calculateNextScheduleDate(
+          scheduleDate!,
+          recurringInterval!,
+          recurringFrequency!
+        );
+
+        const jobId = await boss.sendAfter(
+          scheduledTransferJobName,
+          {
+            params: {
+              id: `transfer-${crypto.randomUUID()}-${Date.now()}`,
+              data: {
+                transferId,
+                type,
+                amount: Number(amount),
+                entityId,
+                accountId,
+                transferType,
+                recurringInterval,
+                recurringFrequency,
+              },
+              name: scheduledTransferJobName,
+              deadLetter: "failed-transfers",
+              retryDelay: 60,
+              retryLimit: 3,
+              retryBackoff: true,
+              expireInSeconds: 300,
+            },
+          },
+          {},
+          nextScheduleDate
+        );
+
+        // Update the scheduled transfer entry with the jobId
+        await db
+          .update(scheduledTransfers)
+          .set({ jobId })
+          .where(eq(scheduledTransfers.id, transferId));
+
+        // Update the status to "processing"
+        await db
+          .update(scheduledTransfers)
+          .set({ status: "processing" })
+          .where(eq(scheduledTransfers.id, transferId));
+      } else if (transferType === "datetime") {
+        // Update the status to "completed"
+        await db
+          .update(scheduledTransfers)
+          .set({ status: "completed" })
+          .where(eq(scheduledTransfers.id, transferId));
+      }
+
       return { success: true };
     } catch (error) {
       console.error("Transfer failed:", error);
+
+      // Failed
+      await db
+        .update(scheduledTransfers)
+        .set({ status: "failed" })
+        .where(eq(scheduledTransfers.id, transferId));
+
       throw error;
     }
   },
 });
+
+function calculateNextScheduleDate(
+  scheduleDate: string,
+  recurringInterval: number,
+  recurringFrequency: "days" | "weeks" | "months"
+): Date {
+  const date = new Date(scheduleDate);
+
+  if (recurringFrequency === "days") {
+    date.setDate(date.getDate() + recurringInterval);
+  } else if (recurringFrequency === "weeks") {
+    date.setDate(date.getDate() + recurringInterval * 7);
+  } else if (recurringFrequency === "months") {
+    date.setMonth(date.getMonth() + recurringInterval);
+  }
+
+  return date;
+}

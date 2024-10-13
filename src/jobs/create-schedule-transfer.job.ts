@@ -22,14 +22,26 @@ export async function createScheduleTransferJobHandler(
     type: "user" | "account";
     entityId: string;
     amount: number;
-    scheduleDate: Date;
+    transferType: "datetime" | "recurring" | "event";
+    scheduleDate?: string;
+    recurringInterval?: number;
+    recurringFrequency?: "days" | "weeks" | "months";
   }>
 ) {
   if (!job.data) {
     throw new Error("Job data is required");
   }
 
-  const { accountId, type, entityId, amount, scheduleDate } = job.data;
+  const {
+    accountId,
+    type,
+    entityId,
+    amount,
+    scheduleDate,
+    transferType,
+    recurringInterval,
+    recurringFrequency,
+  } = job.data;
 
   try {
     // Insert the scheduled transfer into the database
@@ -40,37 +52,53 @@ export async function createScheduleTransferJobHandler(
         type,
         entityId,
         amountCents: Number(amount),
-        transferType: "datetime",
-        scheduleDate: new Date(scheduleDate),
+        transferType,
+        scheduleDate: scheduleDate ? new Date(scheduleDate) : undefined,
+        recurringInterval,
+        recurringFrequency,
       })
       .returning({ id: scheduledTransfers.id });
 
     const transferId = scheduledTransfer[0].id;
 
     // Schedule the job to run at the given date/time
-    const jobId = await boss.sendAfter(
-      scheduledTransferJobName,
-      {
-        params: {
-          id: `transfer-${crypto.randomUUID()}-${Date.now()}`,
-          data: { type, amount: Number(amount), entityId, accountId },
-          name: scheduledTransferJobName,
-          deadLetter: "failed-transfers",
-          retryDelay: 60,
-          retryLimit: 3,
-          retryBackoff: true,
-          expireInSeconds: 300,
+    if (transferType === "datetime" || transferType === "recurring") {
+      const jobId = await boss.sendAfter(
+        scheduledTransferJobName,
+        {
+          params: {
+            id: `transfer-${crypto.randomUUID()}-${Date.now()}`,
+            data: {
+              transferId,
+              type,
+              amount: Number(amount),
+              entityId,
+              accountId,
+              transferType,
+              scheduleDate,
+              recurringInterval,
+              recurringFrequency,
+            },
+            name: scheduledTransferJobName,
+            deadLetter: "failed-transfers",
+            retryDelay: 60,
+            retryLimit: 3,
+            retryBackoff: true,
+            expireInSeconds: 300,
+          },
         },
-      },
-      {},
-      new Date(scheduleDate)
-    );
+        {},
+        new Date(scheduleDate!)
+      );
 
-    // Update the scheduled transfer entry with the jobId
-    await db
-      .update(scheduledTransfers)
-      .set({ jobId })
-      .where(eq(scheduledTransfers.id, transferId));
+      // Update the scheduled transfer entry with the jobId
+      await db
+        .update(scheduledTransfers)
+        .set({ jobId })
+        .where(eq(scheduledTransfers.id, transferId));
+    } else if (transferType === "event") {
+      // Do nothing
+    }
 
     // Return success
     return { success: true, transferId };

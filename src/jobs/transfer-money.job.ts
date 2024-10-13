@@ -6,6 +6,8 @@ import { db } from "@/db/db";
 import { accounts } from "@/db/accounts.db";
 import { transactions } from "@/db/transactions.db";
 import { createJob } from "./task";
+import { runEventTransfersJob } from "./run-event-transfers.job";
+import { scheduledTransferJobName } from "./scheduled-transfer.job";
 
 import type { JobInsert } from "pg-boss";
 
@@ -124,6 +126,14 @@ export const transferMoneyJob = createJob({
             },
           ])
           .returning();
+      });
+
+      // Run the event transfer job for any events that need to be triggered
+      await runEventTransfersJob.trigger({
+        params: {
+          name: scheduledTransferJobName,
+          data: { accountId: destinationAccountId.entityId },
+        },
       });
 
       return { success: true };
