@@ -3,9 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
-import ScheduledTransfersTable, {
-  type ScheduledTransfer,
-} from "./ScheduledTransfersTable";
+import ScheduledTransfersTable, { type ScheduledTransfer } from "./ScheduledTransfersTable";
 
 interface ScheduledTableProps {
   userId: string | null;
@@ -49,15 +47,11 @@ export default function ScheduledTable({
     );
   }
 
-  return transfers.length === 0 ? (
+  return !transfers || transfers.length === 0 ? (
     <div className="flex justify-center items-center h-full">
       <p>No scheduled transfers</p>
     </div>
   ) : (
-    <ScheduledTransfersTable
-      transfers={transfers}
-      userId={userId}
-      setTransfers={setTransfers}
-    />
+    <ScheduledTransfersTable transfers={transfers} userId={userId} setTransfers={setTransfers} />
   );
 }

@@ -37,7 +37,7 @@ import { AccountSelect } from "@/components/AccountSelect";
 import { DateTimePicker } from "@/components/DatetimePicker";
 import { MoneyInput } from "@/components/MoneyInput";
 import { useAuthState } from "@/contexts/AuthStateContext";
-import ScheduledTable from "./ScheduledTable";
+import ScheduledTransfersTabs from "./ScheduledTransfersTabs";
 
 import type { Account } from "@/db/accounts.db";
 import type { User } from "@/db/users.db";
@@ -214,7 +214,10 @@ export default function ScheduleTransfersPage() {
         type: transferType,
         entityId: transferType === "account" ? toAccount?.id : toUser?.id,
         amount: Number(amount),
+        transferType: activeTab,
         scheduleDate: scheduleDate,
+        recurringInterval: recurringInterval,
+        recurringFrequency: recurringFrequency,
       };
 
       const response = await fetch(`/api/account/${fromAccount?.id}/schedule`, {
@@ -486,7 +489,7 @@ export default function ScheduleTransfersPage() {
           </div>
         </Card>
         <Card className="w-2/3 px-4">
-          <ScheduledTable
+          <ScheduledTransfersTabs
             userId={impersonatedUserId}
             refresh={refreshScheduledTable}
           />

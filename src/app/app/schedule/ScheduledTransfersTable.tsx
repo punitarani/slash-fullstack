@@ -150,8 +150,7 @@ export default function ScheduledTransfersTable({
   };
 
   return (
-    <div className="container mx-auto py-10">
-      <h2 className="text-2xl font-bold mb-4">Scheduled Transfers</h2>
+    <div className="container mx-auto py-4 pb-6">
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -195,6 +194,8 @@ export default function ScheduledTransfersTable({
                         : transfer.status === "completed"
                         ? "default"
                         : transfer.status === "failed"
+                        ? "destructive"
+                        : transfer.status === "deleted"
                         ? "destructive"
                         : "secondary"
                     }

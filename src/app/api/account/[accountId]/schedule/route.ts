@@ -12,7 +12,11 @@ export const scheduleTransferRequestBodySchema = z.object({
   type: z.enum(["user", "account"]),
   entityId: z.string(),
   amount: z.number().positive(),
-  scheduleDate: z.string().datetime(),
+  transferType: z.enum(["datetime", "recurring", "event"]),
+  scheduleDate: z.string().datetime().nullable().optional(),
+  recurringInterval: z.number().int().positive().nullable().optional(),
+  recurringFrequency: z.enum(["days", "weeks", "months"]).nullable().optional(),
+  eventType: z.string().nullable().optional().default("deposit"),
 });
 
 export async function POST(req: NextRequest) {
@@ -20,8 +24,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // Validate the request body
-    const { accountId, type, entityId, amount, scheduleDate } =
-      scheduleTransferRequestBodySchema.parse(body);
+    const {
+      accountId,
+      type,
+      entityId,
+      amount,
+      scheduleDate,
+      transferType,
+      recurringInterval,
+      recurringFrequency,
+    } = scheduleTransferRequestBodySchema.parse(body);
 
     // Trigger the first job and wait for the result
     await createScheduleTransferJob.trigger({
@@ -34,7 +46,10 @@ export async function POST(req: NextRequest) {
           type,
           entityId,
           amount,
-          scheduleDate: new Date(scheduleDate),
+          transferType,
+          scheduleDate,
+          recurringInterval,
+          recurringFrequency,
         },
         retryLimit: 3,
         retryDelay: 60,
