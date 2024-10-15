@@ -114,10 +114,6 @@ This architecture demonstrates a scalable, reliable, and extensible approach to 
 
 ## Future Work
 
-Here's a brief "Future Work" section based on your requirements:
-
-## Future Work
-
 - More flexible triggers
   - Expand trigger options to accommodate diverse user needs and complex financial scenarios.
   - Maybe natural language so a user can say "Transfer on the first of every month at 12pm" and it is translated into the correct format.
